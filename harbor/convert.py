@@ -1,4 +1,9 @@
-"""Turn Zendesk article HTML into clean Markdown."""
+"""Turn Zendesk article HTML into clean Markdown.
+
+Assignment constraints: drop nav/ads/scripts; keep ATX headings, in-page `#`
+jumps, and fenced code. Each file starts with `Article URL:` so File Search
+citations can point at the Help Center page.
+"""
 
 from __future__ import annotations
 
@@ -54,6 +59,7 @@ class ArticleConverter(MarkdownConverter):
     def convert_img(self, el, text, parent_tags=None, **kwargs):  # type: ignore[override]
         src = (el.get("src") or "").strip()
         alt = _image_alt(el)
+        # data: URIs blow past Gemini File Search size limits; keep a placeholder.
         if src.startswith("data:"):
             return f"\n\n[{alt}]\n\n"
         if not src:
@@ -62,6 +68,7 @@ class ArticleConverter(MarkdownConverter):
 
 
 def _image_alt(el: Tag) -> str:
+    # Zendesk often uses the screenshot filename as alt (`Firestick-1.png`).
     for key in ("alt", "title"):
         value = (el.get(key) or "").strip()
         if value and not _FILENAME_ALT.match(value):
@@ -143,6 +150,7 @@ def slug_for(article: dict[str, Any]) -> str:
 
 
 def article_to_markdown(article: dict[str, Any]) -> str:
+    """Front-matter + cleaned body. `Article URL:` is what the assistant must cite."""
     title = (article.get("title") or article.get("name") or "Untitled").strip()
     html_url = article.get("html_url") or ""
     body = html_to_markdown(article.get("body") or "")

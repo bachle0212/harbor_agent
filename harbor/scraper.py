@@ -1,4 +1,9 @@
-"""Fetch published Help Center articles from the public Zendesk API."""
+"""Fetch published Help Center articles from the public Zendesk API.
+
+No auth: `GET /api/v2/help_center/{locale}/articles.json`. Incremental
+exports (`/incremental/tickets`, etc.) need an admin token, so daily runs
+instead sort `updated_at desc` and stop at `Catalog.scrape_watermark`.
+"""
 
 from __future__ import annotations
 
@@ -91,6 +96,7 @@ def fetch_articles(
                     continue
                 if not (item.get("body") or "").strip():
                     continue
+                # Sorted newest-first: first article ≤ watermark means the rest is old.
                 if watermark is not None:
                     stamped = parse_zendesk_time(
                         str(item.get("updated_at") or item.get("edited_at") or "")

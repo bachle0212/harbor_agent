@@ -1,4 +1,9 @@
-"""Ask the Gemini File Search assistant a question (sanity check)."""
+"""Ask the Gemini File Search assistant (assignment sanity check).
+
+Gemini's citations are often store filenames, not Help Center URLs. After the
+model replies we map those hints through `data/state.json` and attach up to
+three `Article URL:` lines (the prompt's required cite format).
+"""
 
 from __future__ import annotations
 

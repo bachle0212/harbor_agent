@@ -1,4 +1,4 @@
-"""End-to-end scrape → markdown → delta upload."""
+"""Daily job: scrape → clean Markdown → SHA-256 delta → Gemini upload → exit 0."""
 
 from __future__ import annotations
 
@@ -35,6 +35,9 @@ def scrape_to_disk(
     full: bool = False,
 ) -> tuple[list[ArticleRecord], int, dict[str, Any]]:
     catalog_count = len(catalog.articles)
+    # First run (or --full, or catalog below the assignment's 30-article floor)
+    # walks every published page. Later runs only fetch articles newer than
+    # scrape_watermark, then merge them into the existing catalog.
     watermark = None if full or catalog_count < min_articles else catalog.scrape_watermark
     incremental = watermark is not None
     articles = fetch_articles(
@@ -53,6 +56,7 @@ def scrape_to_disk(
         fetched.append(record_from_article(article, markdown, path))
 
     if incremental:
+        # Watermarked fetch is a prefix of the catalog, not a replacement.
         by_id = {record.article_id: record for record in catalog.articles.values()}
         for record in fetched:
             by_id[record.article_id] = record
@@ -129,6 +133,8 @@ def run(*, scrape_only: bool = False, upload_only: bool = False, full: bool = Fa
         current, estimated_all, scrape_stats = scrape_to_disk(catalog, full=full)
         files_on_disk = len(list(ARTICLES_DIR.glob("*.md"))) if ARTICLES_DIR.exists() else len(current)
 
+    # Hash compare happens after scrape (or --upload-only disk read). Unchanged
+    # bodies are skipped even if Zendesk bumped updated_at.
     delta: Delta = catalog.diff(current)
     log.info(
         "delta added=%s updated=%s skipped=%s",

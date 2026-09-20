@@ -1,4 +1,9 @@
-"""Upload changed Markdown files to a Gemini File Search store via API."""
+"""Upload changed Markdown files to a Gemini File Search store via API.
+
+Chunking is `white_space_config` at 512 / 256: Gemini caps `max_tokens_per_chunk`
+at 512 and overlap at half the chunk. MIME is `text/plain` because `text/markdown`
+is rejected. Only `delta.uploads` (added + updated) go to the API.
+"""
 
 from __future__ import annotations
 

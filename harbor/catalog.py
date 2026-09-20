@@ -1,4 +1,9 @@
-"""Local article catalog: content hashes decide added / updated / skipped."""
+"""Local article catalog.
+
+`data/state.json` is the daily-job memory: last scrape watermark, Gemini store
+id, and a SHA-256 of each Markdown file. The next run compares hashes — not
+Zendesk `updated_at` — so a timestamp bump with identical body is `skipped`.
+"""
 
 from __future__ import annotations
 
@@ -12,6 +17,7 @@ from harbor.config import ARTICLES_DIR, STATE_PATH
 
 
 def sha256_text(text: str) -> str:
+    """Stable content id used for added / updated / skipped."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
@@ -23,6 +29,8 @@ class ArticleRecord:
     updated_at: str
     html_url: str
     path: str
+    # Gemini File Search document name (`fileSearchStores/.../documents/...`).
+    # Name kept from the OpenAI prototype (`file-...`); load() clears those ids.
     openai_file_id: str | None = None
 
 
@@ -40,6 +48,9 @@ class Delta:
 @dataclass
 class Catalog:
     vector_store_id: str | None = None
+    # Newest Help Center `updated_at` already ingested. Daily scrape sorts
+    # articles newest-first and stops once it hits this stamp (Zendesk's
+    # Incremental API needs admin auth, so we watermark the public list instead).
     scrape_watermark: str | None = None
     articles: dict[str, ArticleRecord] = field(default_factory=dict)
 
@@ -54,7 +65,7 @@ class Catalog:
             record = ArticleRecord(**{k: v for k, v in value.items() if k in allowed})
             articles[key] = record
         store_id = raw.get("vector_store_id")
-        # Previous OpenAI runs stored vs_/file- ids; Gemini needs a fresh store.
+        # Leftover OpenAI `vs_` / `file-` ids cannot be reused on Gemini.
         if store_id and (str(store_id).startswith("vs_") or str(store_id).startswith("file-")):
             store_id = None
             for record in articles.values():
@@ -78,16 +89,17 @@ class Catalog:
         tmp.replace(path)
 
     def diff(self, current: list[ArticleRecord]) -> Delta:
+        """Classify each article by Markdown SHA-256 vs the last saved catalog."""
         delta = Delta()
         for record in current:
             previous = self.articles.get(record.article_id)
             if previous is None:
                 delta.added.append(record)
             elif previous.content_hash != record.content_hash:
-                record.openai_file_id = previous.openai_file_id
+                record.openai_file_id = previous.openai_file_id  # delete-then-replace on upload
                 delta.updated.append(record)
             elif not previous.openai_file_id:
-                # Scraped before, never uploaded — treat as added.
+                # On disk from a scrape-only run; still needs a first upload.
                 delta.added.append(record)
             else:
                 record.openai_file_id = previous.openai_file_id
@@ -108,6 +120,7 @@ def write_markdown(slug: str, markdown: str, *, directory: Path = ARTICLES_DIR) 
 def write_markdown_if_changed(
     slug: str, markdown: str, *, directory: Path = ARTICLES_DIR
 ) -> tuple[Path, bool]:
+    """Rewrite `<slug>.md` only when the cleaned Markdown actually changed."""
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{slug}.md"
     incoming = sha256_text(markdown)

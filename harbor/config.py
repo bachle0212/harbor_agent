@@ -20,6 +20,7 @@ ARTICLES_API = (
     "https://support.optisigns.com/api/v2/help_center/{locale}/articles.json"
 )
 
+# Gemini File Search: 512 is the API maximum; overlap must be ≤ half of that.
 CHUNK_SIZE_TOKENS = int(os.getenv("CHUNK_SIZE_TOKENS", "512"))
 CHUNK_OVERLAP_TOKENS = int(os.getenv("CHUNK_OVERLAP_TOKENS", "256"))
 MIN_ARTICLES = int(os.getenv("MIN_ARTICLES", "30"))
