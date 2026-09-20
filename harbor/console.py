@@ -10,11 +10,23 @@ from urllib.parse import urlparse
 
 from harbor.ask import ask, split_reply
 from harbor.catalog import Catalog
-from harbor.config import ARTICLES_DIR, GEMINI_MODEL, api_key, vector_store_id
+from harbor.config import ARTICLES_DIR, GEMINI_MODEL, LAST_RUN_PATH, api_key, vector_store_id
 
 STATIC = Path(__file__).resolve().parent / "static"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
+
+
+def last_run_payload() -> dict[str, object]:
+    if not LAST_RUN_PATH.exists():
+        return {"error": "No last-run artefact yet. Run python main.py first."}
+    try:
+        raw = json.loads(LAST_RUN_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {"error": "logs/last-run.json is not valid JSON."}
+    if isinstance(raw, dict):
+        return raw
+    return {"error": "logs/last-run.json must be an object."}
 
 
 def status_payload() -> dict[str, object]:
@@ -55,6 +67,15 @@ class ConsoleHandler(BaseHTTPRequestHandler):
             html = (STATIC / "console.html").read_bytes()
             self._send(200, html, "text/html; charset=utf-8")
             return
+        if path in {"/run", "/logs"}:
+            html = (STATIC / "last-run.html").read_bytes()
+            self._send(200, html, "text/html; charset=utf-8")
+            return
+        if path in {"/last-run.json", "/api/last-run"}:
+            payload = last_run_payload()
+            code = 404 if payload.get("error") else 200
+            self._json(code, payload)
+            return
         if path == "/api/status":
             self._json(200, status_payload())
             return
@@ -91,6 +112,7 @@ class ConsoleHandler(BaseHTTPRequestHandler):
 def serve(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
     httpd = ThreadingHTTPServer((host, port), ConsoleHandler)
     print(f"Harbor desk: http://{host}:{port}", flush=True)
+    print(f"Last run:    http://{host}:{port}/run", flush=True)
     httpd.serve_forever()
 
 

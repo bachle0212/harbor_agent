@@ -61,7 +61,7 @@ Enable **File Search**. Upload is API-only (no UI drag-and-drop):
 .\.venv\Scripts\python -m harbor.console
 ```
 
-Local desk: [http://127.0.0.1:8765](http://127.0.0.1:8765) (`--repl` for a terminal prompt).
+Local desk: [http://127.0.0.1:8765](http://127.0.0.1:8765) (`--repl` for a terminal prompt). Last-run counts: [http://127.0.0.1:8765/run](http://127.0.0.1:8765/run). On a VPS: `python3 -m harbor.console --host 0.0.0.0 --port 8765` then open `http://VPS_IP:8765/run`.
 
 Attach the printed store id (`fileSearchStores/...`). **Chunking:** Gemini `white_space_config`, **512 tokens / 256 overlap** (API max is 512). Logs print file count and estimated chunks (~4 chars/token).
 

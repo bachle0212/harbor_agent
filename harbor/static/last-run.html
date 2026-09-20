@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Harbor last run</title>
+  <style>
+    :root { --paper: #f3efe4; --mute: #8a94a3; --line: #2a3544; --phosphor: #e8b86d; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #0c1420; color: var(--paper); font: 16px/1.5 system-ui, sans-serif; }
+    main { max-width: 40rem; margin: 0 auto; padding: 40px 20px; }
+    h1 { font-size: 1.6rem; margin: 0 0 8px; }
+    p { color: var(--mute); }
+    a { color: var(--phosphor); }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 24px 0; }
+    .card { border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: #101820; }
+    .card b { display: block; font-size: 1.6rem; color: var(--phosphor); }
+    .card span { color: var(--mute); font-size: 13px; }
+    pre { overflow: auto; border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: #101820; font-size: 13px; }
+    @media (max-width: 640px) { .grid { grid-template-columns: 1fr 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Last run</h1>
+    <p id="when">Loading…</p>
+    <div class="grid">
+      <div class="card"><b id="added">–</b><span>added</span></div>
+      <div class="card"><b id="updated">–</b><span>updated</span></div>
+      <div class="card"><b id="skipped">–</b><span>skipped</span></div>
+      <div class="card"><b id="removed">–</b><span>removed</span></div>
+    </div>
+    <p><a href="/">Desk</a> · <a href="/last-run.json">last-run.json</a></p>
+    <pre id="raw"></pre>
+  </main>
+  <script>
+    fetch("/api/last-run").then((r) => r.json()).then((data) => {
+      if (data.error) {
+        document.getElementById("when").textContent = data.error;
+        return;
+      }
+      document.getElementById("when").textContent = data.ran_at || "";
+      for (const key of ["added", "updated", "skipped", "removed"]) {
+        document.getElementById(key).textContent = data[key] ?? 0;
+      }
+      document.getElementById("raw").textContent = JSON.stringify(data, null, 2);
+    }).catch((err) => {
+      document.getElementById("when").textContent = err.message;
+    });
+  </script>
+</body>
+</html>
