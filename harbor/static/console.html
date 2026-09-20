@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Harbor desk</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&family=Fraunces:opsz,wght@36..72,640&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #0c1420;
+      --panel: #101820;
+      --mine: #2a2418;
+      --paper: #f3efe4;
+      --phosphor: #e8b86d;
+      --mute: #8a94a3;
+      --line: #2a3544;
+      --fault: #c45c4a;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      background: var(--ink);
+      color: var(--paper);
+      font: 16px/1.5 Figtree, sans-serif;
+    }
+    .app {
+      height: 100%;
+      display: grid;
+      grid-template-rows: 56px 1fr auto;
+      max-width: 860px;
+      margin: 0 auto;
+      border-left: 1px solid var(--line);
+      border-right: 1px solid var(--line);
+      background: #0a1018;
+    }
+    header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--line);
+    }
+    header h1 {
+      font-family: Fraunces, serif;
+      font-size: 22px;
+      font-weight: 640;
+      margin: 0;
+      letter-spacing: -0.03em;
+    }
+    header p { margin: 0; color: var(--mute); font-size: 12px; }
+    #thread {
+      overflow: auto;
+      padding: 22px 20px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .row { display: flex; }
+    .row.user { justify-content: flex-end; }
+    .row.bot { justify-content: flex-start; }
+    .bubble {
+      max-width: min(72%, 36rem);
+      padding: 12px 14px;
+      border-radius: 16px;
+    }
+    .user .bubble {
+      background: var(--phosphor);
+      color: var(--ink);
+      border-bottom-right-radius: 4px;
+    }
+    .bot .bubble {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-bottom-left-radius: 4px;
+    }
+    .bubble p { margin: 0 0 8px; }
+    .bubble p:last-child { margin-bottom: 0; }
+    .bubble ul { margin: 8px 0 0; padding-left: 1.15em; }
+    .bubble li { margin: 6px 0; }
+    .cites { margin-top: 10px; display: grid; gap: 6px; }
+    .cite {
+      color: var(--phosphor);
+      font-size: 13px;
+      text-decoration: none;
+      word-break: break-all;
+    }
+    .cite:hover { color: var(--paper); }
+    .cite b { color: var(--paper); font-weight: 700; }
+    .hint, .wait, .fault { color: var(--mute); align-self: center; text-align: center; max-width: 28rem; }
+    .fault { color: var(--fault); }
+    .hint em {
+      font-family: Fraunces, serif;
+      font-style: normal;
+      color: var(--phosphor);
+    }
+    form {
+      display: flex;
+      gap: 10px;
+      padding: 14px 20px 20px;
+      border-top: 1px solid var(--line);
+      background: #0a1018;
+    }
+    textarea {
+      flex: 1;
+      resize: none;
+      min-height: 48px;
+      max-height: 120px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--paper);
+      border-radius: 14px;
+      padding: 12px 14px;
+      font: inherit;
+    }
+    textarea:focus { outline: 2px solid var(--phosphor); outline-offset: 2px; }
+    button {
+      border: 0;
+      background: var(--phosphor);
+      color: var(--ink);
+      font: 600 15px Figtree, sans-serif;
+      border-radius: 14px;
+      padding: 0 18px;
+      cursor: pointer;
+    }
+    button:disabled { opacity: .5; cursor: wait; }
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Harbor</h1>
+      <p id="meta">…</p>
+    </header>
+    <div id="thread" aria-live="polite">
+      <p class="hint">Ask from the uploaded docs.<br />Try <em>How do I add a YouTube video?</em></p>
+    </div>
+    <form id="form">
+      <textarea id="q" rows="1" autofocus placeholder="Message"></textarea>
+      <button type="submit" id="go">Send</button>
+    </form>
+  </div>
+  <script>
+    const thread = document.getElementById("thread");
+    const form = document.getElementById("form");
+    const q = document.getElementById("q");
+    const go = document.getElementById("go");
+
+    function escapeHtml(value) {
+      return value.replace(/[&<>"']/g, (ch) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      }[ch]));
+    }
+
+    function inlineMd(value) {
+      return escapeHtml(value).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    }
+
+    function renderBody(text) {
+      const lines = text.split(/\n+/).filter(Boolean);
+      const bullets = lines.filter((line) => /^[-*•]\s+/.test(line));
+      if (bullets.length) {
+        const intro = lines[0] && !/^[-*•]/.test(lines[0]) ? `<p>${inlineMd(lines[0])}</p>` : "";
+        const items = bullets.map((line) => `<li>${inlineMd(line.replace(/^[-*•]\s+/, ""))}</li>`).join("");
+        return `${intro}<ul>${items}</ul>`;
+      }
+      return lines.map((line) => `<p>${inlineMd(line)}</p>`).join("");
+    }
+
+    function addRow(role, html) {
+      const hint = thread.querySelector(".hint");
+      if (hint) hint.remove();
+      const row = document.createElement("div");
+      row.className = `row ${role}`;
+      row.innerHTML = `<div class="bubble">${html}</div>`;
+      thread.appendChild(row);
+      thread.scrollTop = thread.scrollHeight;
+      return row;
+    }
+
+    async function loadStatus() {
+      const res = await fetch("/api/status");
+      const data = await res.json();
+      const store = (data.store || "").replace("fileSearchStores/", "");
+      document.getElementById("meta").textContent = `${data.model} · ${data.articles} articles`;
+      document.getElementById("meta").title = store;
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const question = q.value.trim();
+      if (!question) return;
+      addRow("user", `<p>${escapeHtml(question)}</p>`);
+      q.value = "";
+      go.disabled = true;
+      const pending = addRow("bot", `<p class="wait">Searching the store…</p>`);
+      try {
+        const res = await fetch("/api/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Ask failed");
+        const hrefs = [];
+        const addHref = (value) => {
+          const href = (String(value).match(/https:\/\/support\.optisigns\.com\/hc\/\S+/) || [""])[0];
+          if (href && !hrefs.includes(href)) hrefs.push(href);
+        };
+        (data.citations || []).forEach(addHref);
+        addHref(data.raw || "");
+        addHref(data.text || "");
+        const cites = hrefs.slice(0, 3).map((href) =>
+          `<a class="cite" href="${href}" target="_blank" rel="noreferrer"><b>Article URL:</b> ${escapeHtml(href)}</a>`
+        ).join("");
+        pending.querySelector(".bubble").innerHTML =
+          `${renderBody(data.text || "")}${cites ? `<div class="cites">${cites}</div>` : ""}`;
+      } catch (err) {
+        pending.querySelector(".bubble").innerHTML = `<p class="fault">${escapeHtml(err.message)}</p>`;
+      } finally {
+        go.disabled = false;
+        thread.scrollTop = thread.scrollHeight;
+        q.focus();
+      }
+    });
+
+    q.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        form.requestSubmit();
+      }
+    });
+
+    loadStatus().catch(() => {
+      document.getElementById("meta").textContent = "offline";
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+name: daily-sync
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: Scrape and upload delta
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_FILE_SEARCH_STORE: ${{ secrets.GEMINI_FILE_SEARCH_STORE }}
+          GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
+        run: python main.py
+
+      - name: Persist catalog and last-run artefact
+        run: |
+          git config user.name "harbor-bot"
+          git config user.email "41898282+github-bot[bot]@users.noreply.github.com"
+          git add data/state.json data/articles logs/last-run.json
+          if git diff --staged --quiet; then
+            echo "No catalog changes."
+          else
+            git commit -m "chore: daily knowledge-base sync"
+            git push
+          fi

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Google AI Studio</title>
+  <style>
+    :root {
+      --bg: #131314;
+      --panel: #1e1f20;
+      --panel-2: #282a2c;
+      --text: #e3e3e3;
+      --muted: #c4c7c5;
+      --dim: #8e918f;
+      --line: #3c4043;
+      --blue: #a8c7fa;
+      --chip: #004a77;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.45 "Google Sans", "Segoe UI", Roboto, sans-serif;
+    }
+    .app { display: grid; grid-template-columns: 72px 1fr 320px; height: 100vh; }
+    .rail {
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px 0;
+      gap: 18px;
+    }
+    .logo {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: conic-gradient(from 210deg, #4285f4, #ea4335, #fbbc04, #34a853, #4285f4);
+    }
+    .nav { color: var(--dim); font-size: 10px; text-align: center; width: 64px; }
+    .nav.on { color: var(--blue); }
+    .main { display: flex; flex-direction: column; min-width: 0; }
+    header {
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--line);
+    }
+    header strong { font-weight: 500; }
+    .model { color: var(--muted); font-size: 13px; }
+    .chat { flex: 1; overflow: auto; padding: 28px 48px 16px; }
+    .turn { max-width: 820px; margin: 0 auto 28px; }
+    .who { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; color: var(--muted); }
+    .avatar {
+      width: 28px; height: 28px; border-radius: 50%;
+      display: grid; place-items: center; font-size: 12px; font-weight: 600;
+    }
+    .user .avatar { background: #394457; }
+    .bot .avatar { background: linear-gradient(135deg, #4285f4, #34a853); }
+    .bubble { white-space: pre-wrap; }
+    .user .bubble {
+      background: var(--panel-2);
+      border-radius: 18px;
+      padding: 12px 16px;
+      display: inline-block;
+    }
+    ul { margin: 8px 0 12px; padding-left: 20px; }
+    li { margin: 6px 0; }
+    .cites {
+      display: flex; flex-direction: column; gap: 8px; margin-top: 14px;
+    }
+    .cite {
+      display: flex; align-items: flex-start; gap: 10px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 12px;
+      text-decoration: none;
+      color: var(--text);
+    }
+    .cite b { color: var(--blue); font-weight: 500; }
+    .cite small { color: var(--dim); display: block; }
+    .badge {
+      font-size: 11px; color: var(--blue);
+      background: #1a2b3d; border: 1px solid #3b5c7a;
+      border-radius: 999px; padding: 2px 8px;
+    }
+    .composer {
+      border-top: 1px solid var(--line);
+      padding: 16px 48px 24px;
+    }
+    .box {
+      max-width: 820px; margin: 0 auto;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 12px 16px;
+      color: var(--dim);
+      background: var(--panel);
+    }
+    .side {
+      background: var(--panel);
+      border-left: 1px solid var(--line);
+      padding: 18px 16px;
+      font-size: 13px;
+    }
+    .side h3 { font-size: 12px; color: var(--dim); font-weight: 500; margin: 18px 0 8px; text-transform: uppercase; letter-spacing: .04em; }
+    .side h3:first-child { margin-top: 0; }
+    .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); }
+    .sys {
+      background: var(--panel-2);
+      border-radius: 10px;
+      padding: 10px;
+      color: var(--muted);
+      white-space: pre-wrap;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .onoff { color: #81c995; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="rail">
+      <div class="logo"></div>
+      <div class="nav on">Chat</div>
+      <div class="nav">Stream</div>
+      <div class="nav">Build</div>
+      <div class="nav">Dashboard</div>
+      <div class="nav">File search</div>
+    </aside>
+    <section class="main">
+      <header>
+        <strong>Google AI Studio</strong>
+        <span class="model">gemini-3.6-flash · File Search</span>
+      </header>
+      <div class="chat">
+        <div class="turn user">
+          <div class="who"><span class="avatar">U</span> User</div>
+          <div class="bubble">How do I add a YouTube video?</div>
+        </div>
+        <div class="turn bot">
+          <div class="who">
+            <span class="avatar">G</span> OptiBot
+            <span class="badge">Grounded in File Search</span>
+          </div>
+          <div>
+            To add a YouTube video to OptiSigns, follow these steps:
+            <ul>
+              <li>Log in to the OptiSigns portal, navigate to <b>Files/Assets</b>, and click <b>Apps</b>.</li>
+              <li>Select the <b>YouTube</b> app.</li>
+              <li>Enter a <b>Name</b> for the asset.</li>
+              <li>Paste the video link into the <b>URL</b> field (if using YouTube Shorts, change <code>/shorts/</code> in the link to <code>/watch?v=</code>).</li>
+              <li>Toggle closed captions on or off as needed, then click <b>Save</b>.</li>
+            </ul>
+            <div class="cites">
+              <a class="cite" href="https://support.optisigns.com/hc/en-us/articles/360051014713-How-to-Use-YouTube-with-OptiSigns">
+                <span>1</span>
+                <span>
+                  <b>Article URL:</b> https://support.optisigns.com/hc/en-us/articles/360051014713-How-to-Use-YouTube-with-OptiSigns
+                  <small>Source: 360051014713-How-to-Use-YouTube-with-OptiSigns.md · harbor-support-docs</small>
+                </span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="composer"><div class="box">Ask Gemini</div></div>
+    </section>
+    <aside class="side">
+      <h3>Run settings</h3>
+      <div class="row"><span>Model</span><span>gemini-3.6-flash</span></div>
+      <div class="row"><span>Tools</span><span class="onoff">File Search on</span></div>
+      <div class="row"><span>Store</span><span>harborsupportdocs-cfw3eobbv3a7</span></div>
+      <h3>System instructions</h3>
+      <div class="sys">You are OptiBot, the customer-support bot for OptiSigns.com.
+• Tone: helpful, factual, concise.
+• Only answer using the uploaded docs.
+• Max 5 bullet points; else link to the doc.
+• Cite up to 3 "Article URL:" lines per reply.</div>
+    </aside>
+  </div>
+</body>
+</html>

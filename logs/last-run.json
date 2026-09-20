@@ -1,0 +1,29 @@
+{
+  "ran_at": "2026-09-19T18:46:22.295889+00:00",
+  "files_on_disk": 409,
+  "estimated_chunks_on_disk": 0,
+  "added": 0,
+  "updated": 0,
+  "skipped": 409,
+  "vector_store_id": "fileSearchStores/harborsupportdocs-cfw3eobbv3a7",
+  "files_uploaded": 0,
+  "estimated_chunks_uploaded": 0,
+  "batch_status": null,
+  "store_usage_bytes": 2043443,
+  "chunking": {
+    "type": "white_space",
+    "static": {
+      "max_chunk_size_tokens": 512,
+      "chunk_overlap_tokens": 256
+    }
+  },
+  "provider": "gemini",
+  "upload_failures": [],
+  "scrape_only": false,
+  "upload_only": false,
+  "full": false,
+  "incremental": true,
+  "watermark": "2026-09-18T20:09:38Z",
+  "fetched": 0,
+  "files_written": 0
+}

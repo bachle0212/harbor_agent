@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.env
+note.txt
+.python-version
+logs/*.log
+!logs/.gitkeep
+.DS_Store
+Thumbs.db
