@@ -25,6 +25,9 @@ CHUNK_SIZE_TOKENS = int(os.getenv("CHUNK_SIZE_TOKENS", "512"))
 CHUNK_OVERLAP_TOKENS = int(os.getenv("CHUNK_OVERLAP_TOKENS", "256"))
 MIN_ARTICLES = int(os.getenv("MIN_ARTICLES", "30"))
 ZENDESK_LOCALE = os.getenv("ZENDESK_LOCALE", "en-us")
+# Public Help Center: pause between pages; 429 uses Retry-After on top of this.
+SCRAPE_MIN_INTERVAL = float(os.getenv("SCRAPE_MIN_INTERVAL", "0.5"))
+SCRAPE_MAX_RETRIES = int(os.getenv("SCRAPE_MAX_RETRIES", "5"))
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 EMBEDDING_MODEL = os.getenv("GEMINI_EMBEDDING_MODEL", "models/gemini-embedding-001")
 

@@ -24,8 +24,9 @@ No Gemini/Zendesk calls (scraper is mocked). From the repo root:
 | File | Cases |
 |---|---|
 | `tests/test_convert.py` | Strip nav/scripts; keep ATX headings, `#` jumps, fenced code; `Article URL:` line; drop filename image alts and `data:` URIs |
-| `tests/test_scraper.py` | Skip drafts/empty; paginate; fail below 30 articles on a full scrape; stop at `updated_at` watermark |
-| `tests/test_catalog.py` | SHA-256 delta `added` / `updated` / `skipped`; persist Gemini store id + watermark; skip rewrite when Markdown is unchanged |
+| `tests/test_scraper.py` | Skip drafts/empty; paginate; fail below 30 articles on a full scrape; stop at `updated_at` watermark; space pages; retry HTTP 429 |
+| `tests/test_catalog.py` | SHA-256 delta `added` / `updated` / `skipped` / `removed`; persist Gemini store id + watermark; skip rewrite when Markdown is unchanged; `--remove` lookup + local purge |
+| `tests/test_report.py` | Compact run log: pending-upload slug, no dumped dict |
 | `tests/test_ask.py` | Keep `Article URL:` cites, drop `Source:`; map Gemini file names / titles back to Help Center URLs |
 
 ## 0. Warm-up
@@ -34,7 +35,7 @@ Free Gemini key at [aistudio.google.com/apikey](https://aistudio.google.com/apik
 
 ## 1. Scrape ⇒ Markdown
 
-Public Zendesk Help Center API, published articles only. HTML cleaned (nav/ads/scripts removed); headings, relative `#` links, and code blocks kept. Each file is `<slug>.md` with an `Article URL:` line.
+Public Zendesk Help Center API, published articles only. Pages wait `SCRAPE_MIN_INTERVAL` (default 0.5s); HTTP 429 retries with `Retry-After`. HTML cleaned (nav/ads/scripts removed); headings, relative `#` links, and code blocks kept. Each file is `<slug>.md` with an `Article URL:` line.
 
 ```powershell
 .\.venv\Scripts\python main.py --scrape-only
@@ -70,7 +71,14 @@ Attach the printed store id (`fileSearchStores/...`). **Chunking:** Gemini `whit
 
 ## 3. Daily job
 
-`main.py` re-scrapes (stops at the last `updated_at` watermark unless `--full`), SHA-256 diffs, uploads only added/updated files, logs `added` / `updated` / `skipped`, then exits 0.
+`main.py` re-scrapes (stops at the last `updated_at` watermark unless `--full`), SHA-256 diffs, uploads added/updated files, deletes unpublished ones (`removed`), logs `added` / `updated` / `skipped` / `removed`, then exits 0.
+
+```powershell
+.\.venv\Scripts\python main.py --remove 360016247974
+.\.venv\Scripts\python main.py --remove some-article-slug.md another-id
+```
+
+`--remove` takes an article id, slug, or `.md` filename. It drops the local file, the catalog row, and the File Search document. `--full` does the same for articles that disappeared from the Help Center. Incremental runs do not guess deletions (watermarked fetch is a prefix, not a full list).
 
 ```bash
 docker build -t harbor-kb .

@@ -8,12 +8,19 @@ instead sort `updated_at desc` and stop at `Catalog.scrape_watermark`.
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 import httpx
 
-from harbor.config import ARTICLES_API, MIN_ARTICLES, ZENDESK_LOCALE
+from harbor.config import (
+    ARTICLES_API,
+    MIN_ARTICLES,
+    SCRAPE_MAX_RETRIES,
+    SCRAPE_MIN_INTERVAL,
+    ZENDESK_LOCALE,
+)
 
 log = logging.getLogger(__name__)
 
@@ -23,6 +30,100 @@ PAGE_SIZE = 100
 
 class ScrapeError(RuntimeError):
     pass
+
+
+class RateLimiter:
+    """Space requests by min_interval seconds (no-op when interval ≤ 0)."""
+
+    def __init__(
+        self,
+        min_interval: float,
+        *,
+        sleep: Callable[[float], None] = time.sleep,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.min_interval = max(0.0, min_interval)
+        self._sleep = sleep
+        self._clock = clock
+        self._last = 0.0
+
+    def wait(self) -> None:
+        if self.min_interval <= 0:
+            return
+        gap = self.min_interval - (self._clock() - self._last)
+        if gap > 0:
+            self._sleep(gap)
+        self._last = self._clock()
+
+    def backoff(self, seconds: float) -> None:
+        if seconds > 0:
+            self._sleep(seconds)
+        self._last = self._clock()
+
+
+def retry_after_seconds(response: httpx.Response, attempt: int) -> float:
+    raw = (response.headers.get("Retry-After") or response.headers.get("retry-after") or "").strip()
+    if raw:
+        try:
+            return min(max(float(raw), 0.0), 60.0)
+        except ValueError:
+            pass
+    return min(2.0**attempt, 30.0)
+
+
+def _get_json(
+    client: httpx.Client,
+    url: str,
+    params: dict[str, Any] | None,
+    limiter: RateLimiter,
+    *,
+    max_retries: int,
+) -> dict[str, Any]:
+    last_error: Exception | None = None
+    attempts = max(1, max_retries)
+    for attempt in range(1, attempts + 1):
+        limiter.wait()
+        try:
+            response = client.get(url, params=params)
+        except httpx.TransportError as exc:
+            last_error = exc
+            delay = min(2.0**attempt, 16.0)
+            log.warning("scrape   transport error, sleep %.1fs (%s/%s): %s", delay, attempt, attempts, exc)
+            limiter.backoff(delay)
+            continue
+        if response.status_code == 429:
+            delay = retry_after_seconds(response, attempt)
+            log.warning("scrape   HTTP 429, sleep %.1fs (%s/%s)", delay, attempt, attempts)
+            limiter.backoff(delay)
+            last_error = httpx.HTTPStatusError(
+                "Too Many Requests", request=response.request, response=response
+            )
+            continue
+        if response.status_code >= 500:
+            delay = min(2.0**attempt, 16.0)
+            log.warning(
+                "scrape   HTTP %s, sleep %.1fs (%s/%s)",
+                response.status_code,
+                delay,
+                attempt,
+                attempts,
+            )
+            limiter.backoff(delay)
+            last_error = httpx.HTTPStatusError(
+                f"Server error {response.status_code}",
+                request=response.request,
+                response=response,
+            )
+            continue
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise ScrapeError(f"Zendesk Help Center request failed: {exc}") from exc
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise ScrapeError("Zendesk Help Center returned a non-object JSON body.")
+        return payload
+    raise ScrapeError(f"Zendesk Help Center request failed after {attempts} attempts: {last_error}")
 
 
 def parse_zendesk_time(value: str | None) -> datetime | None:
@@ -59,12 +160,16 @@ def fetch_articles(
     min_articles: int = MIN_ARTICLES,
     updated_after: str | None = None,
     client: httpx.Client | None = None,
+    min_interval: float | None = None,
+    max_retries: int | None = None,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> list[dict[str, Any]]:
     """Pull published articles, newest first.
 
     If updated_after is set (ISO timestamp), stop paging once Zendesk returns
     an article at or older than that watermark. min_articles is enforced only
-    on a full scrape (no watermark).
+    on a full scrape (no watermark). Pages are spaced by min_interval; HTTP 429
+    waits Retry-After (capped at 60s) and retries.
     """
     own_client = client is None
     if own_client:
@@ -75,6 +180,11 @@ def fetch_articles(
         )
     assert client is not None
 
+    limiter = RateLimiter(
+        SCRAPE_MIN_INTERVAL if min_interval is None else min_interval,
+        sleep=sleep,
+    )
+    retries = SCRAPE_MAX_RETRIES if max_retries is None else max_retries
     watermark = parse_zendesk_time(updated_after)
     articles: list[dict[str, Any]] = []
     url: str | None = ARTICLES_API.format(locale=locale)
@@ -86,9 +196,7 @@ def fetch_articles(
 
     try:
         while url:
-            response = client.get(url, params=params)
-            response.raise_for_status()
-            payload = response.json()
+            payload = _get_json(client, url, params, limiter, max_retries=retries)
             page = payload.get("articles") or []
             reached_watermark = False
             for item in page:
@@ -106,11 +214,11 @@ def fetch_articles(
                         break
                 articles.append(item)
             if reached_watermark:
-                log.info("stopped at watermark %s after %s newer articles", updated_after, len(articles))
                 break
             url = payload.get("next_page")
             params = None
-            log.info("fetched %s published articles so far", len(articles))
+            if url:
+                log.info("scrape   %s articles so far", len(articles))
     except httpx.HTTPError as exc:
         raise ScrapeError(f"Zendesk Help Center request failed: {exc}") from exc
     finally:
@@ -121,5 +229,4 @@ def fetch_articles(
         raise ScrapeError(
             f"Only fetched {len(articles)} published articles; need at least {min_articles}."
         )
-    log.info("scrape complete: %s published articles", len(articles))
     return articles

@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from harbor.catalog import (
     ArticleRecord,
     Catalog,
@@ -7,6 +9,7 @@ from harbor.catalog import (
     write_markdown,
     write_markdown_if_changed,
 )
+from harbor.pipeline import remove_by_hints, run
 from harbor.uploader import estimate_chunks
 
 
@@ -40,6 +43,74 @@ def test_delta_added_updated_skipped():
     assert [r.article_id for r in delta.updated] == ["1"]
     assert delta.updated[0].openai_file_id == "file-old"
     assert [r.article_id for r in delta.added] == ["2"]
+    assert delta.removed == []
+
+
+def test_delta_removed_when_article_missing():
+    catalog = Catalog(
+        articles={
+            "1": _record("1", "keep"),
+            "2": _record("2", "gone"),
+        }
+    )
+    catalog.articles["1"].openai_file_id = "doc-1"
+    catalog.articles["2"].openai_file_id = "doc-2"
+    delta = catalog.diff([_record("1", "keep")])
+    assert [r.article_id for r in delta.skipped] == ["1"]
+    assert [r.article_id for r in delta.removed] == ["2"]
+    assert delta.removed[0].openai_file_id == "doc-2"
+
+
+def test_lookup_id_slug_and_filename():
+    rec = _record("9", "body", slug="9-nine")
+    catalog = Catalog(articles={"9": rec})
+    assert catalog.lookup("9") is rec
+    assert catalog.lookup("9-nine") is rec
+    assert catalog.lookup("9-nine.md") is rec
+    assert catalog.lookup(r"data\articles\9-nine.md") is rec
+    assert catalog.lookup("missing") is None
+
+
+def test_purge_deletes_markdown_and_catalog_row(tmp_path: Path):
+    path = write_markdown("gone", "# x\n", directory=tmp_path)
+    rec = _record("1", "# x\n", slug="gone")
+    rec.path = str(path)
+    catalog = Catalog(articles={"1": rec})
+    dropped = catalog.purge([rec])
+    assert dropped == ["gone"]
+    assert not path.exists()
+    assert "1" not in catalog.articles
+
+
+def test_remove_rejects_scrape_flags():
+    with pytest.raises(ValueError, match="--remove"):
+        run(remove=["1"], full=True)
+
+
+def test_remove_by_hints_drops_file(tmp_path: Path, monkeypatch):
+    from harbor import catalog as catalog_mod
+    from harbor import pipeline as pipeline_mod
+
+    monkeypatch.setattr(catalog_mod, "STATE_PATH", tmp_path / "state.json")
+    monkeypatch.setattr(catalog_mod, "ARTICLES_DIR", tmp_path)
+    monkeypatch.setattr(pipeline_mod, "ARTICLES_DIR", tmp_path)
+    monkeypatch.setattr(pipeline_mod, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(pipeline_mod, "LAST_RUN_PATH", tmp_path / "last-run.json")
+
+    path = write_markdown("gone", "# x\n", directory=tmp_path)
+    rec = _record("1", "# x\n", slug="gone")
+    rec.path = str(path)
+    catalog = Catalog(articles={"1": rec})
+    summary = remove_by_hints(["gone.md"], catalog=catalog)
+    assert summary["removed"] == 1
+    assert summary["removed_slugs"] == ["gone"]
+    assert not path.exists()
+    assert "1" not in catalog.articles
+
+
+def test_remove_unknown_hint():
+    with pytest.raises(ValueError, match="Unknown"):
+        remove_by_hints(["no-such-article"], catalog=Catalog())
 
 
 def test_never_uploaded_hash_is_added_not_skipped():

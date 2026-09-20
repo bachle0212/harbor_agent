@@ -159,13 +159,21 @@ def _upload_file_with_retry(
 
 
 def apply_delta(delta: Delta, catalog: Catalog) -> dict[str, Any]:
-    """Upload only added/updated files. Returns counts for the run log."""
-    client = _client()
-    store_id = ensure_vector_store(client, catalog)
+    """Upload added/updated files and drop removed ones from the store."""
+    client: genai.Client | None = None
+    store_id = vector_store_id() or catalog.vector_store_id
+    if delta.uploads:
+        client = _client()
+        store_id = ensure_vector_store(client, catalog)
+    elif delta.removed and store_id and not _is_openai_id(store_id):
+        client = _client()
 
-    for record in delta.updated:
-        _delete_old_file(client, record.openai_file_id)
-        record.openai_file_id = None
+    if client:
+        for record in delta.updated:
+            _delete_old_file(client, record.openai_file_id)
+            record.openai_file_id = None
+        for record in delta.removed:
+            _delete_old_file(client, record.openai_file_id)
 
     new_ids: list[str] = []
     failed: list[str] = []
@@ -175,6 +183,7 @@ def apply_delta(delta: Delta, catalog: Catalog) -> dict[str, Any]:
         estimated += estimate_chunks(Path(record.path).read_text(encoding="utf-8"))
 
     if uploads:
+        assert client is not None
         log.info("uploading %s files to Gemini File Search", len(uploads))
         with ThreadPoolExecutor(max_workers=2) as pool:
             futures = {
@@ -203,13 +212,19 @@ def apply_delta(delta: Delta, catalog: Catalog) -> dict[str, Any]:
 
     for record in delta.skipped:
         catalog.upsert(record)
+    if delta.removed:
+        log.info("removing %s articles from disk/catalog/store", len(delta.removed))
+    dropped = catalog.purge(delta.removed)
 
     catalog.save()
-    persist_vector_store_id(store_id)
-    usage_bytes = _usage_bytes(client, store_id)
+    if store_id and not _is_openai_id(store_id):
+        persist_vector_store_id(store_id)
+    usage_bytes = _usage_bytes(client, store_id) if client and store_id else 0
     return {
         "vector_store_id": store_id,
         "files_uploaded": len(new_ids),
+        "files_removed": len(dropped),
+        "removed": len(dropped),
         "estimated_chunks_uploaded": estimated,
         "batch_status": "completed" if new_ids else None,
         "store_usage_bytes": usage_bytes,

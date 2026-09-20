@@ -39,6 +39,7 @@ class Delta:
     added: list[ArticleRecord] = field(default_factory=list)
     updated: list[ArticleRecord] = field(default_factory=list)
     skipped: list[ArticleRecord] = field(default_factory=list)
+    removed: list[ArticleRecord] = field(default_factory=list)
 
     @property
     def uploads(self) -> list[ArticleRecord]:
@@ -91,7 +92,9 @@ class Catalog:
     def diff(self, current: list[ArticleRecord]) -> Delta:
         """Classify each article by Markdown SHA-256 vs the last saved catalog."""
         delta = Delta()
+        seen: set[str] = set()
         for record in current:
+            seen.add(record.article_id)
             previous = self.articles.get(record.article_id)
             if previous is None:
                 delta.added.append(record)
@@ -104,10 +107,42 @@ class Catalog:
             else:
                 record.openai_file_id = previous.openai_file_id
                 delta.skipped.append(record)
+        # Full scrape / disk listing: anything no longer present is unpublished.
+        # Incremental scrape merges into the catalog first, so this stays empty.
+        for article_id, previous in self.articles.items():
+            if article_id not in seen:
+                delta.removed.append(previous)
         return delta
+
+    def lookup(self, hint: str) -> ArticleRecord | None:
+        """Resolve an article id, slug, or `.md` filename."""
+        token = (hint or "").strip()
+        if not token:
+            return None
+        name = Path(token.replace("\\", "/")).name
+        stem = name[:-3] if name.lower().endswith(".md") else name
+        if stem in self.articles:
+            return self.articles[stem]
+        for record in self.articles.values():
+            if record.article_id == stem or record.slug == stem:
+                return record
+        return None
 
     def upsert(self, record: ArticleRecord) -> None:
         self.articles[record.article_id] = record
+
+    def purge(self, records: list[ArticleRecord]) -> list[str]:
+        """Drop catalog rows and local Markdown. Returns deleted slugs."""
+        dropped: list[str] = []
+        for record in records:
+            path = Path(record.path)
+            if not path.is_file():
+                path = ARTICLES_DIR / f"{record.slug}.md"
+            if path.is_file():
+                path.unlink()
+            self.articles.pop(record.article_id, None)
+            dropped.append(record.slug)
+        return dropped
 
 
 def write_markdown(slug: str, markdown: str, *, directory: Path = ARTICLES_DIR) -> Path:

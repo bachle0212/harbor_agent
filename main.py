@@ -5,9 +5,9 @@ from __future__ import annotations
 
 import argparse
 import logging
-import sys
 
 from harbor.pipeline import run
+from harbor.report import configure_logging
 from harbor.uploader import UploadError
 from harbor.scraper import ScrapeError
 
@@ -21,28 +21,25 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Ignore the updated_at watermark and scrape every published article.",
     )
+    parser.add_argument(
+        "--remove",
+        nargs="+",
+        metavar="ID",
+        help="Delete article(s) from disk, catalog, and File Search (id, slug, or .md name).",
+    )
     args = parser.parse_args(argv)
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    configure_logging()
     try:
-        summary = run(scrape_only=args.scrape_only, upload_only=args.upload_only, full=args.full)
+        run(
+            scrape_only=args.scrape_only,
+            upload_only=args.upload_only,
+            full=args.full,
+            remove=args.remove,
+        )
     except (ScrapeError, UploadError, ValueError) as exc:
         logging.error("%s", exc)
         return 1
-
-    print(
-        "added={added} updated={updated} skipped={skipped} files_on_disk={files_on_disk}".format(
-            **summary
-        )
-    )
-    if summary.get("files_uploaded") is not None:
-        print(
-            "uploaded={files_uploaded} estimated_chunks_uploaded={estimated_chunks_uploaded} "
-            "vector_store={vector_store_id}".format(**{**{"estimated_chunks_uploaded": 0, "vector_store_id": ""}, **summary})
-        )
     return 0
 
 

@@ -18,8 +18,9 @@ from harbor.catalog import (
 )
 from harbor.config import ARTICLES_DIR, LAST_RUN_PATH, LOG_DIR, MIN_ARTICLES, persist_vector_store_id
 from harbor.convert import article_to_markdown, slug_for
+from harbor.report import log_run_report
 from harbor.scraper import fetch_articles, newest_timestamp
-from harbor.uploader import apply_delta, estimate_chunks
+from harbor.uploader import UploadError, apply_delta, estimate_chunks
 
 log = logging.getLogger(__name__)
 
@@ -79,14 +80,6 @@ def scrape_to_disk(
         "fetched": len(fetched),
         "files_written": written,
     }
-    log.info(
-        "scrape fetched=%s written=%s incremental=%s watermark=%s estimated_chunks=%s",
-        len(fetched),
-        written,
-        incremental,
-        watermark,
-        estimated_all,
-    )
     return current, estimated_all, stats
 
 
@@ -116,13 +109,66 @@ def write_last_run(payload: dict[str, Any]) -> Path:
     return LAST_RUN_PATH
 
 
-def run(*, scrape_only: bool = False, upload_only: bool = False, full: bool = False) -> dict[str, Any]:
+def remove_by_hints(hints: list[str], *, catalog: Catalog | None = None) -> dict[str, Any]:
+    """Delete by article id, slug, or `.md` name: disk + catalog + File Search."""
+    catalog = catalog or Catalog.load()
+    found: list[ArticleRecord] = []
+    missing: list[str] = []
+    seen: set[str] = set()
+    for hint in hints:
+        record = catalog.lookup(hint)
+        if record is None:
+            missing.append(hint)
+            continue
+        if record.article_id in seen:
+            continue
+        seen.add(record.article_id)
+        found.append(record)
+    if missing:
+        raise ValueError("Unknown article(s): " + ", ".join(missing))
+    if not found:
+        raise ValueError("Pass at least one article id, slug, or .md filename")
+
+    try:
+        upload_stats = apply_delta(Delta(removed=found), catalog)
+    except UploadError as exc:
+        log.warning("File Search delete skipped (%s); dropping local files anyway", exc)
+        upload_stats = {"removed": len(catalog.purge(found)), "provider": "local"}
+        catalog.save()
+
+    files_on_disk = len(list(ARTICLES_DIR.glob("*.md"))) if ARTICLES_DIR.exists() else 0
+    summary = {
+        "ran_at": _now(),
+        "files_on_disk": files_on_disk,
+        "added": 0,
+        "updated": 0,
+        "skipped": 0,
+        "removed": len(found),
+        "removed_slugs": [record.slug for record in found],
+        **upload_stats,
+    }
+    write_last_run(summary)
+    log_run_report(summary)
+    return summary
+
+
+def run(
+    *,
+    scrape_only: bool = False,
+    upload_only: bool = False,
+    full: bool = False,
+    remove: list[str] | None = None,
+) -> dict[str, Any]:
     if upload_only and scrape_only:
         raise ValueError("Choose at most one of --scrape-only / --upload-only")
     if upload_only and full:
         raise ValueError("--full cannot be combined with --upload-only")
+    if remove and (scrape_only or upload_only or full):
+        raise ValueError("--remove cannot be combined with scrape/upload flags")
 
     catalog = Catalog.load()
+    if remove:
+        return remove_by_hints(remove, catalog=catalog)
     estimated_all = 0
     scrape_stats: dict[str, Any] = {}
 
@@ -136,12 +182,6 @@ def run(*, scrape_only: bool = False, upload_only: bool = False, full: bool = Fa
     # Hash compare happens after scrape (or --upload-only disk read). Unchanged
     # bodies are skipped even if Zendesk bumped updated_at.
     delta: Delta = catalog.diff(current)
-    log.info(
-        "delta added=%s updated=%s skipped=%s",
-        len(delta.added),
-        len(delta.updated),
-        len(delta.skipped),
-    )
 
     upload_stats: dict[str, Any] = {}
     if scrape_only:
@@ -150,6 +190,7 @@ def run(*, scrape_only: bool = False, upload_only: bool = False, full: bool = Fa
             if previous:
                 record.openai_file_id = previous.openai_file_id
             catalog.upsert(record)
+        upload_stats["removed"] = len(catalog.purge(delta.removed))
     else:
         try:
             upload_stats = apply_delta(delta, catalog)
@@ -159,6 +200,8 @@ def run(*, scrape_only: bool = False, upload_only: bool = False, full: bool = Fa
             catalog.save()
 
     catalog.save()
+    if ARTICLES_DIR.exists():
+        files_on_disk = len(list(ARTICLES_DIR.glob("*.md")))
     summary = {
         "ran_at": _now(),
         "files_on_disk": files_on_disk,
@@ -166,6 +209,10 @@ def run(*, scrape_only: bool = False, upload_only: bool = False, full: bool = Fa
         "added": len(delta.added),
         "updated": len(delta.updated),
         "skipped": len(delta.skipped),
+        "removed": len(delta.removed),
+        "added_slugs": [record.slug for record in delta.added],
+        "updated_slugs": [record.slug for record in delta.updated],
+        "removed_slugs": [record.slug for record in delta.removed],
         **upload_stats,
         "scrape_only": scrape_only,
         "upload_only": upload_only,
@@ -173,5 +220,5 @@ def run(*, scrape_only: bool = False, upload_only: bool = False, full: bool = Fa
         **scrape_stats,
     }
     write_last_run(summary)
-    log.info("run complete: %s", summary)
+    log_run_report(summary)
     return summary
