@@ -21,6 +21,23 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def stored_article_path(slug: str) -> str:
+    """Portable filename only — never a machine-specific absolute path."""
+    return f"{slug}.md"
+
+
+def resolve_article_path(slug: str, stored: str = "") -> Path:
+    """Map catalog path → file under ARTICLES_DIR on this machine."""
+    raw = Path((stored or "").replace("\\", "/"))
+    if raw.is_absolute() and raw.is_file():
+        return raw
+    name = raw.name if raw.name.endswith(".md") else stored_article_path(slug)
+    for candidate in (ARTICLES_DIR / stored_article_path(slug), ARTICLES_DIR / name):
+        if candidate.is_file():
+            return candidate
+    return ARTICLES_DIR / stored_article_path(slug or name.removesuffix(".md") or "article")
+
+
 @dataclass
 class ArticleRecord:
     article_id: str
@@ -32,6 +49,14 @@ class ArticleRecord:
     # Gemini File Search document name (`fileSearchStores/.../documents/...`).
     # Name kept from the OpenAI prototype (`file-...`); load() clears those ids.
     openai_file_id: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.slug:
+            self.path = stored_article_path(self.slug)
+
+    @property
+    def resolved_path(self) -> Path:
+        return resolve_article_path(self.slug, self.path)
 
 
 @dataclass
@@ -135,9 +160,7 @@ class Catalog:
         """Drop catalog rows and local Markdown. Returns deleted slugs."""
         dropped: list[str] = []
         for record in records:
-            path = Path(record.path)
-            if not path.is_file():
-                path = ARTICLES_DIR / f"{record.slug}.md"
+            path = record.resolved_path
             if path.is_file():
                 path.unlink()
             self.articles.pop(record.article_id, None)
@@ -176,5 +199,5 @@ def record_from_article(
         content_hash=sha256_text(markdown),
         updated_at=str(article.get("updated_at") or article.get("edited_at") or ""),
         html_url=str(article.get("html_url") or ""),
-        path=str(path),
+        path=stored_article_path(path.stem),
     )

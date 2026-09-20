@@ -118,7 +118,7 @@ def _delete_old_file(client: genai.Client, file_id: str | None) -> None:
 
 def _upload_file(client: genai.Client, store_id: str, record: ArticleRecord) -> str:
     operation = client.file_search_stores.upload_to_file_search_store(
-        file=record.path,
+        file=str(record.resolved_path),
         file_search_store_name=store_id,
         config={
             "display_name": f"{record.slug}.md",
@@ -180,7 +180,7 @@ def apply_delta(delta: Delta, catalog: Catalog) -> dict[str, Any]:
     estimated = 0
     uploads = list(delta.uploads)
     for record in uploads:
-        estimated += estimate_chunks(Path(record.path).read_text(encoding="utf-8"))
+        estimated += estimate_chunks(record.resolved_path.read_text(encoding="utf-8"))
 
     if uploads:
         assert client is not None

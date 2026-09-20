@@ -71,6 +71,31 @@ def test_lookup_id_slug_and_filename():
     assert catalog.lookup("missing") is None
 
 
+def test_state_path_is_portable_filename(tmp_path: Path):
+    from harbor.catalog import resolve_article_path
+
+    rec = ArticleRecord(
+        article_id="1",
+        slug="1-hello",
+        content_hash=sha256_text("x"),
+        updated_at="",
+        html_url="",
+        path=r"E:\optisign\data\articles\1-hello.md",
+    )
+    assert rec.path == "1-hello.md"
+    catalog = Catalog(articles={"1": rec})
+    catalog.save(tmp_path / "state.json")
+    loaded = Catalog.load(tmp_path / "state.json")
+    assert loaded.articles["1"].path == "1-hello.md"
+    assert "E:" not in loaded.articles["1"].path
+    resolved = resolve_article_path(
+        "360016219114-What-if-I-want-to-increase-decrease-number-of-screens-during-the-month",
+        r"E:\optisign\data\articles\360016219114-What-if-I-want-to-increase-decrease-number-of-screens-during-the-month.md",
+    )
+    assert resolved.name.endswith(".md")
+    assert resolved.parent.name == "articles"
+
+
 def test_purge_deletes_markdown_and_catalog_row(tmp_path: Path):
     path = write_markdown("gone", "# x\n", directory=tmp_path)
     rec = _record("1", "# x\n", slug="gone")

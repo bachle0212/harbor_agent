@@ -70,9 +70,9 @@ def scrape_to_disk(
     ) or catalog.scrape_watermark
 
     estimated_all = sum(
-        estimate_chunks(Path(record.path).read_text(encoding="utf-8"))
+        estimate_chunks(record.resolved_path.read_text(encoding="utf-8"))
         for record in fetched
-        if Path(record.path).exists()
+        if record.resolved_path.exists()
     )
     stats = {
         "incremental": incremental,
@@ -96,7 +96,7 @@ def records_from_disk(catalog: Catalog) -> list[ArticleRecord]:
                 content_hash=sha256_text(text),
                 updated_at=previous.updated_at if previous else "",
                 html_url=previous.html_url if previous else "",
-                path=str(path),
+                path=f"{path.stem}.md",
                 openai_file_id=previous.openai_file_id if previous else None,
             )
         )
