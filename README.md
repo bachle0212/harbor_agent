@@ -1,6 +1,6 @@
 # Harbor KB
 
-Help Center ingest: scrape → clean Markdown → Gemini File Search (API only). Publish under a **cryptic GitHub name** (not `optisigns` / `optibot`).
+Help Center ingest: scrape → clean Markdown → Gemini File Search (API only).
 
 ## Setup
 
@@ -30,12 +30,11 @@ No Gemini/Zendesk calls (scraper is mocked). From the repo root:
 
 ## 0. Warm-up
 
-1. Free trial at [optisigns.com](https://www.optisigns.com) — chat OptiBot once so you know the tone.
-2. Free Gemini key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
+Free Gemini key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
 
 ## 1. Scrape ⇒ Markdown
 
-Zendesk Help Center API (`support.optisigns.com`), published articles only. HTML cleaned (nav/ads/scripts removed); headings, relative `#` links, and code blocks kept. Each file is `<slug>.md` with an `Article URL:` line.
+Public Zendesk Help Center API, published articles only. HTML cleaned (nav/ads/scripts removed); headings, relative `#` links, and code blocks kept. Each file is `<slug>.md` with an `Article URL:` line.
 
 ```powershell
 .\.venv\Scripts\python main.py --scrape-only
@@ -45,9 +44,9 @@ Output: `data/articles/` (409 files, ≥30 required).
 
 ## 2. Assistant + vector store (API upload)
 
-Create the assistant in [AI Studio](https://aistudio.google.com) with this system prompt **verbatim**:
+Create the assistant in [AI Studio](https://aistudio.google.com) with this system prompt:
 
-> You are OptiBot, the customer-support bot for OptiSigns.com.
+> You are a customer-support assistant for the uploaded Help Center docs.
 > • Tone: helpful, factual, concise.
 > • Only answer using the uploaded docs.
 > • Max 5 bullet points; else link to the doc.
