@@ -80,11 +80,32 @@ Attach the printed store id (`fileSearchStores/...`). **Chunking:** Gemini `whit
 
 `--remove` takes an article id, slug, or `.md` filename. It drops the local file, the catalog row, and the File Search document. `--full` does the same for articles that disappeared from the Help Center. Incremental runs do not guess deletions (watermarked fetch is a prefix, not a full list).
 
+Same image, two processes: the job **runs once and exits 0**; the desk stays on port 8765 and serves last-run counts.
+
 ```bash
 docker build -t harbor-kb .
-docker run --rm -e API_KEY="$GEMINI_API_KEY" -e GEMINI_FILE_SEARCH_STORE=fileSearchStores/... harbor-kb
+docker run --rm --env-file .env \
+  -v "$PWD/data:/app/data" -v "$PWD/logs:/app/logs" \
+  harbor-kb
 ```
 
-Schedule: `.github/workflows/daily.yml` (06:00 UTC + `workflow_dispatch`).
+Keep `/run` public without installing Python on the VPS:
 
-**Job logs:** [Actions — daily-sync](https://github.com/bachle0212/harbor_agent/actions/workflows/daily.yml) · last local artefact: [`logs/last-run.json`](logs/last-run.json)
+```bash
+docker compose up -d desk
+docker compose run --rm job
+```
+
+- Desk: http://45.130.164.151:8765
+- Last run: http://45.130.164.151:8765/run · http://45.130.164.151:8765/logs
+- JSON: http://45.130.164.151:8765/last-run.json
+
+Cron (06:00 UTC, after `docker build` / `compose up -d desk`):
+
+```cron
+0 6 * * * cd /root/optisign/harbor_agent && /usr/bin/docker compose run --rm job >> /root/optisign/harbor_agent/logs/cron.log 2>&1
+```
+
+Also scheduled on GitHub: `.github/workflows/daily.yml` (06:00 UTC + `workflow_dispatch`).
+
+**Job logs:** [Actions — daily-sync](https://github.com/bachle0212/harbor_agent/actions/workflows/daily.yml) · VPS last run: [http://45.130.164.151:8765/run](http://45.130.164.151:8765/run) · artefact: [`logs/last-run.json`](logs/last-run.json)

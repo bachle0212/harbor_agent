@@ -41,7 +41,23 @@ def test_format_remove():
     assert "done     files=408" in text
 
 
+def test_console_host_from_env(monkeypatch):
+    monkeypatch.setenv("HARBOR_HOST", "0.0.0.0")
+    monkeypatch.setenv("HARBOR_PORT", "9000")
+    import importlib
+
+    from harbor import console as console_mod
+
+    importlib.reload(console_mod)
+    assert console_mod.DEFAULT_HOST == "0.0.0.0"
+    assert console_mod.DEFAULT_PORT == 9000
+    monkeypatch.delenv("HARBOR_HOST")
+    monkeypatch.delenv("HARBOR_PORT")
+    importlib.reload(console_mod)
+
+
 def test_last_run_payload(tmp_path, monkeypatch):
+
     from harbor import console as console_mod
 
     missing = tmp_path / "none.json"

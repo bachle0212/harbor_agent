@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -13,8 +14,8 @@ from harbor.catalog import Catalog
 from harbor.config import ARTICLES_DIR, GEMINI_MODEL, LAST_RUN_PATH, api_key, vector_store_id
 
 STATIC = Path(__file__).resolve().parent / "static"
-DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 8765
+DEFAULT_HOST = os.getenv("HARBOR_HOST", "127.0.0.1")
+DEFAULT_PORT = int(os.getenv("HARBOR_PORT", "8765"))
 
 
 def last_run_payload() -> dict[str, object]:
