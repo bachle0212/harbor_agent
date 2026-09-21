@@ -1,15 +1,20 @@
 {
-  "ran_at": "2026-09-19T18:46:22.295889+00:00",
+  "ran_at": "2026-09-21T11:57:23.828371+00:00",
   "files_on_disk": 409,
   "estimated_chunks_on_disk": 0,
   "added": 0,
   "updated": 0,
   "skipped": 409,
+  "removed": 0,
+  "added_slugs": [],
+  "updated_slugs": [],
+  "removed_slugs": [],
   "vector_store_id": "fileSearchStores/harborsupportdocs-cfw3eobbv3a7",
   "files_uploaded": 0,
+  "files_removed": 0,
   "estimated_chunks_uploaded": 0,
   "batch_status": null,
-  "store_usage_bytes": 2043443,
+  "store_usage_bytes": 0,
   "chunking": {
     "type": "white_space",
     "static": {
